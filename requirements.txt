@@ -8,3 +8,4 @@ lightgbm
 xgboost
 matplotlib
 seaborn
+python-pptx

@@ -1,24 +1,45 @@
 from flask import Flask, request, jsonify
+import os
 import joblib, pandas as pd
 
 app = Flask(__name__)
 
-clf_model = joblib.load("model_classification.pkl")
-clf_prep  = joblib.load("preprocessor_classification.pkl")
+MODEL_PATH = "model_classification.pkl"
+PREP_PATH = "preprocessor_classification.pkl"
+
+clf_model = joblib.load(MODEL_PATH)
+clf_prep = joblib.load(PREP_PATH) if os.path.exists(PREP_PATH) else None
+
+
+def _is_pipeline(model):
+    return hasattr(model, "named_steps")
+
+
+def _get_classes(model, probs):
+    if hasattr(model, "named_steps") and "model" in model.named_steps:
+        inner = model.named_steps["model"]
+        if hasattr(inner, "classes_"):
+            return inner.classes_
+    if hasattr(model, "classes_"):
+        return model.classes_
+    return [str(i) for i in range(len(probs))]
 
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json()
     df = pd.DataFrame([data])
 
-    # Binary encode
-    df["Part_Time_Job"]   = 1 if data["Part_Time_Job"]   == "Yes" else 0
-    df["Extracurricular"] = 1 if data["Extracurricular"]  == "Yes" else 0
+    if _is_pipeline(clf_model):
+        features = df
+    else:
+        # Binary encode only when using separate preprocessor
+        df["Part_Time_Job"] = 1 if data["Part_Time_Job"] == "Yes" else 0
+        df["Extracurricular"] = 1 if data["Extracurricular"] == "Yes" else 0
+        features = clf_prep.transform(df) if clf_prep is not None else df
 
-    transformed = clf_prep.transform(df)
-    grade = clf_model.predict(transformed)[0]
-    probs = clf_model.predict_proba(transformed)[0]
-    classes = clf_model.classes_
+    grade = clf_model.predict(features)[0]
+    probs = clf_model.predict_proba(features)[0]
+    classes = _get_classes(clf_model, probs)
 
     return jsonify({
         "predicted_grade": grade,
