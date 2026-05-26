@@ -1,7 +1,7 @@
 gradio
 flask
 pandas
-numpy<2
+numpy>=2,<3
 scikit-learn==1.6.1
 imbalanced-learn
 joblib
